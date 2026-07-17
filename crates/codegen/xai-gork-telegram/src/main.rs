@@ -1,11 +1,4 @@
-//! `gork-telegram` — native phone remote for Gork Build.
-//!
-//! Env:
-//!   TELEGRAM_BOT_TOKEN   (required)
-//!   ALLOWED_USER_IDS     (required, comma-separated)
-//!   GORK_TELEGRAM_CWD    (optional working directory)
-//!   GORK_BIN / GROK_BINARY (optional agent path)
-//!   ORCHESTRATOR_HOST_ID (optional label)
+//! `gork-telegram` — complete native phone remote for Gork Build.
 
 use anyhow::Result;
 use clap::Parser;
@@ -16,32 +9,34 @@ use xai_gork_telegram::{run_telegram_remote, RuntimeConfig};
 #[derive(Debug, Parser)]
 #[command(
     name = "gork-telegram",
-    about = "Native Telegram remote for Gork Build (ACP + phone full control)"
+    about = "Native Telegram remote for Gork Build — full phone control (ACP)"
 )]
 struct Args {
-    /// Telegram bot token (or TELEGRAM_BOT_TOKEN).
     #[arg(long, env = "TELEGRAM_BOT_TOKEN")]
     token: String,
 
-    /// Comma-separated allowed Telegram user ids (or ALLOWED_USER_IDS).
     #[arg(long, env = "ALLOWED_USER_IDS")]
     allowed_users: String,
 
-    /// Working directory for the agent session.
     #[arg(long, env = "GORK_TELEGRAM_CWD", default_value = ".")]
     cwd: PathBuf,
 
-    /// Path to gork/grok binary (default: same dir as this binary, or PATH).
     #[arg(long, env = "GORK_BIN")]
     agent: Option<PathBuf>,
 
-    /// Optional existing session id to load.
     #[arg(long, env = "GORK_TELEGRAM_SESSION")]
     session: Option<String>,
 
-    /// Host label shown on /start.
     #[arg(long, env = "ORCHESTRATOR_HOST_ID", default_value = "this-pc")]
     host_id: String,
+
+    /// Sessions root (default ~/.grok/sessions)
+    #[arg(long, env = "GROK_SESSIONS_ROOT")]
+    sessions_root: Option<PathBuf>,
+
+    /// Data dir for notes + inbound media (default ~/.grok/telegram-native)
+    #[arg(long, env = "GORK_TELEGRAM_DATA")]
+    data_dir: Option<PathBuf>,
 }
 
 #[tokio::main]
@@ -54,6 +49,15 @@ async fn main() -> Result<()> {
 
     let args = Args::parse();
     let cwd = args.cwd.canonicalize().unwrap_or(args.cwd);
+    let home = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("."));
+    let sessions_root = args
+        .sessions_root
+        .unwrap_or_else(|| home.join(".grok/sessions"));
+    let data_dir = args
+        .data_dir
+        .unwrap_or_else(|| home.join(".grok/telegram-native"));
 
     run_telegram_remote(RuntimeConfig {
         bot_token: args.token,
@@ -62,6 +66,8 @@ async fn main() -> Result<()> {
         agent_bin: args.agent,
         session_id: args.session,
         host_id: args.host_id,
+        sessions_root,
+        data_dir,
     })
     .await
 }

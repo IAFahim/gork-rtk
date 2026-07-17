@@ -1,16 +1,15 @@
-//! Minimal Telegram Bot API long-poll client.
+//! Minimal Telegram Bot API long-poll client (+ media download).
 
 use anyhow::{Context, Result};
 use serde::Deserialize;
 use serde_json::{json, Value};
+use std::path::PathBuf;
 
 #[derive(Debug, Clone)]
 pub struct TelegramBot {
     token: String,
     http: reqwest::Client,
 }
-
-// reqwest::Client is already Clone
 
 #[derive(Debug, Deserialize)]
 pub struct Update {
@@ -25,6 +24,26 @@ pub struct Message {
     pub chat: Chat,
     pub from: Option<User>,
     pub text: Option<String>,
+    pub caption: Option<String>,
+    pub photo: Option<Vec<PhotoSize>>,
+    pub document: Option<Document>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PhotoSize {
+    pub file_id: String,
+    pub file_unique_id: Option<String>,
+    pub width: Option<i64>,
+    pub height: Option<i64>,
+    pub file_size: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Document {
+    pub file_id: String,
+    pub file_name: Option<String>,
+    pub mime_type: Option<String>,
+    pub file_size: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -76,7 +95,10 @@ impl TelegramBot {
             .query(&[
                 ("offset", offset.to_string()),
                 ("timeout", timeout.to_string()),
-                ("allowed_updates", r#"["message","callback_query"]"#.into()),
+                (
+                    "allowed_updates",
+                    r#"["message","callback_query"]"#.into(),
+                ),
             ])
             .send()
             .await
@@ -97,6 +119,12 @@ impl TelegramBot {
         text: &str,
         reply_markup: Option<Value>,
     ) -> Result<()> {
+        // Telegram hard limit ~4096
+        let text = if text.len() > 4000 {
+            format!("{}…", &text[..3999])
+        } else {
+            text.to_string()
+        };
         let mut body = json!({
             "chat_id": chat_id,
             "text": text,
@@ -133,6 +161,39 @@ impl TelegramBot {
             .await?;
         Ok(())
     }
+
+    pub async fn get_file_path(&self, file_id: &str) -> Result<String> {
+        let v: Value = self
+            .http
+            .get(self.url("getFile"))
+            .query(&[("file_id", file_id)])
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+        v.pointer("/result/file_path")
+            .and_then(|p| p.as_str())
+            .map(|s| s.to_string())
+            .ok_or_else(|| anyhow::anyhow!("getFile missing file_path: {v}"))
+    }
+
+    pub async fn download_file(&self, file_path: &str, dest: &PathBuf) -> Result<()> {
+        let url = format!("https://api.telegram.org/file/bot{}/{}", self.token, file_path);
+        let bytes = self
+            .http
+            .get(&url)
+            .send()
+            .await?
+            .error_for_status()?
+            .bytes()
+            .await?;
+        if let Some(parent) = dest.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(dest, &bytes)?;
+        Ok(())
+    }
 }
 
 /// Escape for Telegram HTML.
@@ -143,7 +204,6 @@ pub fn esc(s: &str) -> String {
 }
 
 pub fn inline_keyboard(rows: Vec<Vec<(String, String)>>) -> Value {
-    // (text, callback_data)
     let inline_keyboard: Vec<Vec<Value>> = rows
         .into_iter()
         .map(|row| {

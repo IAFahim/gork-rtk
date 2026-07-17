@@ -122,17 +122,25 @@ curl -fsSL https://raw.githubusercontent.com/IAFahim/gork-rtk/main/scripts/insta
 
 Releases: https://github.com/IAFahim/gork-rtk/releases
 
-### Phone remote (native Telegram)
+### Phone remote (native Telegram) — full control
 
-Drive the **same agent** from your phone (ACP, tools, permissions, plans):
+Drive Gork Build from your phone: **sessions, notes, media, live agent, tool/plan buttons**.
 
 ```sh
 cargo build -p xai-gork-telegram --release
-# see docs/TELEGRAM-NATIVE.md
-bash scripts/install-telegram.sh   # builds unit + env scaffold
+bash scripts/install-telegram.sh   # release binary + systemd user unit
+# docs/TELEGRAM-NATIVE.md
 ```
 
-Env: `TELEGRAM_BOT_TOKEN`, `ALLOWED_USER_IDS`, `GORK_BIN` (your `gork`), `GORK_TELEGRAM_CWD`.
+| Env | Purpose |
+|-----|---------|
+| `TELEGRAM_BOT_TOKEN` | BotFather token (one bot per PC) |
+| `ALLOWED_USER_IDS` | Your numeric id(s), fail-closed if empty |
+| `GORK_BIN` | Path to privacy `gork` agent |
+| `GORK_TELEGRAM_CWD` | Default project cwd |
+| `ORCHESTRATOR_HOST_ID` | Label on /start |
+
+Phone: `/sessions` → Use · `/live` · type · photo · `/drain` · `/stop`
 
 ---
 

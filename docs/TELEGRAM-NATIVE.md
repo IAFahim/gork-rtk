@@ -105,7 +105,7 @@ So: **ACP was the right seam**. **Python wrapping the CLI forever was the wrong 
 - Binary: https://github.com/IAFahim/gork-rtk (privacy + RTK)  
 - **Native phone remote (shipped in-tree):** crate `xai-gork-telegram` → binary **`gork-telegram`**
 
-### Run native remote
+### Run native remote (complete phone control)
 
 ```bash
 # Build
@@ -124,6 +124,21 @@ bash scripts/install-telegram.sh
 systemctl --user enable --now gork-telegram.service
 ```
 
-**Phone loop:** message the bot → ACP `session/prompt` on a real agent process → reply text + tool titles stream back → permission / multi-option / plan reverse-requests become inline buttons.
+**Phone loop (full):**
 
-**Agent process:** `gork agent stdio` (same official ACP path as IDEs). Full tools/hooks/RTK apply because the agent binary is Gork Build itself — not a dumbed-down wrapper.
+| Action | Command / UI |
+|--------|----------------|
+| Browse chats | `/sessions` or **Sessions** button |
+| Use a chat | Tap **Use** under a session |
+| New chat | `/new` or **New** |
+| Offline notes | Type while live **off** → parked |
+| Go live | `/live` — real `gork agent stdio` |
+| Free-text live | Type → agent reply body in Telegram |
+| Tool / plan holds | Inline buttons |
+| Photo / file | Saved under data dir; live → path prompt |
+| Drain notes | `/drain` or **Drain→live** |
+| History peek | `/history` |
+| Stop live | `/stop` |
+
+**Agent process:** `gork agent stdio` (official ACP path). Tools, hooks, RTK apply.  
+**Not:** sharing an already-open TUI window (separate process by design).
