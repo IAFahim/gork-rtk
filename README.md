@@ -123,25 +123,124 @@ curl -fsSL https://raw.githubusercontent.com/IAFahim/gork-rtk/main/scripts/insta
 
 Releases: https://github.com/IAFahim/gork-rtk/releases
 
-### Phone remote (native Telegram) — full control
+## Phone remote (Telegram) — setup
 
-Drive Gork Build from your phone: **sessions, notes, media, live agent, tool/plan buttons**.
+Control Gork Build from your phone: **sessions, notes, media, live agent, permissions/plans as buttons**.
+
+Architecture notes: [`docs/TELEGRAM-NATIVE.md`](docs/TELEGRAM-NATIVE.md).
+
+### Prerequisites
+
+1. **This PC** with Rust toolchain (`rustup`) if building from source.
+2. **Gork agent binary** on the machine (privacy build):
+   ```sh
+   curl -fsSL https://raw.githubusercontent.com/IAFahim/gork-rtk/main/scripts/install.sh | bash
+   # → ~/.local/bin/gork  (and/or ~/.grok/bin/gork)
+   gork --version
+   gork login    # or first TUI launch — must be signed in for model API
+   ```
+3. **Telegram bot** (one bot **per PC** — do not share the token with another machine or with the old Python bridge at the same time):
+   - Open [@BotFather](https://t.me/BotFather) → `/newbot` → copy the **token**
+4. **Your Telegram user id** (numeric), e.g. from [@userinfobot](https://t.me/userinfobot)
+
+### One-shot install (recommended)
 
 ```sh
-cargo build -p xai-gork-telegram --release
-bash scripts/install-telegram.sh   # release binary + systemd user unit
-# docs/TELEGRAM-NATIVE.md
+git clone https://github.com/IAFahim/gork-rtk.git
+cd gork-rtk
+
+# Build gork-telegram, install to ~/.local/bin, write systemd unit + env scaffold
+bash scripts/install-telegram.sh
 ```
 
-| Env | Purpose |
-|-----|---------|
-| `TELEGRAM_BOT_TOKEN` | BotFather token (one bot per PC) |
-| `ALLOWED_USER_IDS` | Your numeric id(s), fail-closed if empty |
-| `GORK_BIN` | Path to privacy `gork` agent |
-| `GORK_TELEGRAM_CWD` | Default project cwd |
-| `ORCHESTRATOR_HOST_ID` | Label on /start |
+Edit secrets (created on first run, mode `600`):
 
-Phone: `/sessions` → Use · `/live` · type · photo · `/drain` · `/stop`
+```sh
+nano ~/.grok/telegram.env
+```
+
+```bash
+TELEGRAM_BOT_TOKEN=123456:ABC-DEF…     # from BotFather
+ALLOWED_USER_IDS=987654321             # your numeric id (comma-separated ok)
+ORCHESTRATOR_HOST_ID=lab-pc            # short label on /start
+GORK_TELEGRAM_CWD=/home/YOU/Github/my-project
+GORK_BIN=/home/YOU/.local/bin/gork     # privacy agent from install.sh
+# Optional:
+# GORK_TELEGRAM_SESSION=               # load this session id on start
+# GROK_SESSIONS_ROOT=/home/YOU/.grok/sessions
+# GORK_TELEGRAM_DATA=/home/YOU/.grok/telegram-native
+```
+
+Start and enable always-on:
+
+```sh
+systemctl --user daemon-reload
+systemctl --user enable --now gork-telegram.service
+systemctl --user status gork-telegram.service
+journalctl --user -u gork-telegram -f
+# optional (keep running after logout):
+# sudo loginctl enable-linger "$USER"
+```
+
+### Manual run (no systemd)
+
+```sh
+cd gork-rtk
+cargo build -p xai-gork-telegram --release
+
+export TELEGRAM_BOT_TOKEN=…
+export ALLOWED_USER_IDS=…
+export GORK_BIN=$HOME/.local/bin/gork
+export GORK_TELEGRAM_CWD=$HOME/Github/my-project
+export ORCHESTRATOR_HOST_ID=$(hostname -s)
+
+./target/release/gork-telegram
+# or after install-telegram.sh:  gork-telegram
+```
+
+### Env reference
+
+| Variable | Required | Meaning |
+|----------|----------|---------|
+| `TELEGRAM_BOT_TOKEN` | **yes** | BotFather token (this PC only) |
+| `ALLOWED_USER_IDS` | **yes** | Comma-separated Telegram user ids; **empty = deny all** |
+| `GORK_BIN` | recommended | Path to `gork` agent (`agent stdio`) |
+| `GORK_TELEGRAM_CWD` | recommended | Default project directory for new/live sessions |
+| `ORCHESTRATOR_HOST_ID` | optional | Label shown on `/start` |
+| `GORK_TELEGRAM_SESSION` | optional | Session id to load on startup |
+| `GROK_SESSIONS_ROOT` | optional | Default `~/.grok/sessions` |
+| `GORK_TELEGRAM_DATA` | optional | Notes + inbound media; default `~/.grok/telegram-native` |
+
+### Phone daily loop
+
+1. Message the bot → `/start` or `/home`
+2. **Sessions** → tap **Use** on a chat (or **New**)
+3. **Go live** (`/live`) when you want the real agent
+4. Type freely → reply body returns in Telegram  
+   (live **off** → text parks in **Notes**)
+5. Photo/file → saved on PC; if live, path is prompted to the agent
+6. **Drain→live** / `/drain` sends the next parked note into live
+7. Tool / multi-option / plan holds appear as **buttons**
+8. `/stop` when done
+
+### Stop the old Python bridge
+
+If you previously ran [`grok-telegram-bridge`](https://github.com/IAFahim/grok-telegram-bridge), **stop it** before starting native remote — only **one** long-poller may use a bot token:
+
+```sh
+systemctl --user stop grok-telegram-bridge.service 2>/dev/null || true
+# or kill the python -m grok_telegram_bridge process
+```
+
+### Troubleshooting
+
+| Symptom | Check |
+|---------|--------|
+| Bot ignores you | `ALLOWED_USER_IDS` must include **your** numeric id; bot restarted after edit |
+| “spawn agent” / prompt fails | `GORK_BIN` points at a working `gork`; run `gork login` on the PC |
+| No reply, only hang | `journalctl --user -u gork-telegram -f`; agent may need network/API auth |
+| Two bots fighting | Don’t run Python bridge + `gork-telegram` on the same token |
+| Unit inactive after reboot | `loginctl enable-linger $USER` for user systemd |
 
 ---
 
