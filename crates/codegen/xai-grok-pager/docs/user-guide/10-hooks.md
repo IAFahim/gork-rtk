@@ -190,6 +190,11 @@ The event is sent as JSON on **stdin** (for example, a `PreToolUse` event; the p
 For `PreToolUse` hooks, write JSON to **stdout**:
 
 - **Allow**: `{"decision": "allow"}`
+- **Allow + rewrite tool input** (Claude Code / RTK compatible):  
+  `{"decision": "allow", "updatedInput": {"command": "rtk git status"}}`  
+  or the Claude nested form used by RTK:  
+  `{"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"command":"rtk git status"}}}`  
+  Grok shallow-merges `updatedInput` into the tool arguments and re-parses them before execution.
 - **Deny**: `{"decision": "deny", "reason": "Unsafe command detected"}`
 
 ### Exit Codes

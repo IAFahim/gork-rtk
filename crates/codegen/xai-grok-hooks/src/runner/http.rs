@@ -328,7 +328,7 @@ fn parse_http_blocking_result(
     if response_text.trim().is_empty() {
         // No body: use HTTP status as fallback.
         if status.is_success() {
-            return HookRunnerResult::Decision(HookDecision::Allow);
+            return HookRunnerResult::Decision(HookDecision::allow());
         }
         return HookRunnerResult::Failed(format!("HTTP status {} with empty body", status));
     }
@@ -344,7 +344,7 @@ fn parse_http_blocking_result(
                     hook_name: hook_name.to_string(),
                 })
             } else if output.decision == "allow" {
-                HookRunnerResult::Decision(HookDecision::Allow)
+                HookRunnerResult::Decision(HookDecision::allow())
             } else {
                 HookRunnerResult::Failed(format!(
                     "unknown decision value '{}' from hook '{}'",
@@ -360,7 +360,7 @@ fn parse_http_blocking_result(
                     error = %e,
                     "could not parse HTTP hook response JSON, treating as allow"
                 );
-                HookRunnerResult::Decision(HookDecision::Allow)
+                HookRunnerResult::Decision(HookDecision::allow())
             } else {
                 HookRunnerResult::Failed(format!(
                     "HTTP status {} and failed to parse response: {e}",
@@ -406,7 +406,7 @@ mod tests {
             parse_http_blocking_result(r#"{"decision":"allow"}"#, StatusCode::OK, "test-hook");
         assert!(matches!(
             result,
-            HookRunnerResult::Decision(HookDecision::Allow)
+            HookRunnerResult::Decision(HookDecision::Allow { .. })
         ));
     }
 
@@ -459,7 +459,7 @@ mod tests {
         let result = parse_http_blocking_result("", StatusCode::OK, "test-hook");
         assert!(matches!(
             result,
-            HookRunnerResult::Decision(HookDecision::Allow)
+            HookRunnerResult::Decision(HookDecision::Allow { .. })
         ));
     }
 
@@ -468,7 +468,7 @@ mod tests {
         let result = parse_http_blocking_result("   \n  ", StatusCode::OK, "test-hook");
         assert!(matches!(
             result,
-            HookRunnerResult::Decision(HookDecision::Allow)
+            HookRunnerResult::Decision(HookDecision::Allow { .. })
         ));
     }
 
@@ -490,7 +490,7 @@ mod tests {
         let result = parse_http_blocking_result("not json at all", StatusCode::OK, "test-hook");
         assert!(matches!(
             result,
-            HookRunnerResult::Decision(HookDecision::Allow)
+            HookRunnerResult::Decision(HookDecision::Allow { .. })
         ));
     }
 
@@ -531,7 +531,7 @@ mod tests {
         );
         assert!(matches!(
             result,
-            HookRunnerResult::Decision(HookDecision::Allow)
+            HookRunnerResult::Decision(HookDecision::Allow { .. })
         ));
     }
 
@@ -541,7 +541,7 @@ mod tests {
             parse_http_blocking_result(r#"{"decision":"deny""#, StatusCode::OK, "test-hook");
         assert!(matches!(
             result,
-            HookRunnerResult::Decision(HookDecision::Allow)
+            HookRunnerResult::Decision(HookDecision::Allow { .. })
         ));
     }
 

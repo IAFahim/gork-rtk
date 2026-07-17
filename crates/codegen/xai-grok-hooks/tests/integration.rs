@@ -85,7 +85,7 @@ async fn hook_allows_via_json() {
         &ctx,
     )
     .await;
-    assert_eq!(result.decision, HookDecision::Allow);
+    assert_eq!(result.decision, HookDecision::allow());
 }
 
 #[tokio::test]
@@ -177,7 +177,7 @@ async fn hook_fail_open_on_crash() {
             .await;
     assert_eq!(
         pre_result.decision,
-        HookDecision::Allow,
+        HookDecision::allow(),
         "fail-open: a crashing hook must not block the tool call"
     );
     assert_eq!(
@@ -212,7 +212,7 @@ async fn hook_fail_open_on_timeout() {
             .await;
     assert_eq!(
         pre_result.decision,
-        HookDecision::Allow,
+        HookDecision::allow(),
         "fail-open: a timing-out hook must not block the tool call"
     );
 }
@@ -248,7 +248,7 @@ async fn matcher_filters_tool_name() {
     let pre_result =
         dispatcher::dispatch_pre_tool_use(&registry, &pre_tool_use_envelope("read_file"), &ctx)
             .await;
-    assert_eq!(pre_result.decision, HookDecision::Allow);
+    assert_eq!(pre_result.decision, HookDecision::allow());
 }
 
 #[tokio::test]
@@ -344,7 +344,7 @@ async fn hook_receives_stdin_envelope() {
     let pre_result =
         dispatcher::dispatch_pre_tool_use(&registry, &pre_tool_use_envelope("read_file"), &ctx)
             .await;
-    assert_eq!(pre_result.decision, HookDecision::Allow);
+    assert_eq!(pre_result.decision, HookDecision::allow());
 }
 
 #[tokio::test]
@@ -377,7 +377,7 @@ async fn hook_receives_env_vars() {
     let pre_result =
         dispatcher::dispatch_pre_tool_use(&registry, &pre_tool_use_envelope("read_file"), &ctx)
             .await;
-    assert_eq!(pre_result.decision, HookDecision::Allow);
+    assert_eq!(pre_result.decision, HookDecision::allow());
 
     // Verify env vars were received.
     let output = std::fs::read_to_string(&output_file).unwrap();
@@ -408,7 +408,7 @@ async fn shell_pipe_command_works() {
     let pre_result =
         dispatcher::dispatch_pre_tool_use(&registry, &pre_tool_use_envelope("read_file"), &ctx)
             .await;
-    assert_eq!(pre_result.decision, HookDecision::Allow);
+    assert_eq!(pre_result.decision, HookDecision::allow());
 }
 
 fn make_envelope(event: HookEventName, payload: HookPayload) -> HookEventEnvelope {
@@ -624,7 +624,7 @@ async fn runner_injected_vars_override_extra_env_at_spawn() {
     let result =
         dispatcher::dispatch_pre_tool_use(&registry, &pre_tool_use_envelope("read_file"), &ctx)
             .await;
-    assert_eq!(result.decision, HookDecision::Allow);
+    assert_eq!(result.decision, HookDecision::allow());
 
     let captured = std::fs::read_to_string(&output_file).unwrap();
     // Reserved keys: runner values must win (NOT the spoofed values).
@@ -749,7 +749,7 @@ async fn direct_exec_command_with_env_var_resolves_at_load_time() {
             .await;
     assert_eq!(
         result.decision,
-        HookDecision::Allow,
+        HookDecision::allow(),
         "direct-exec hook with env-var-resolved path must run, got {:?}",
         result.decision
     );
@@ -820,7 +820,7 @@ async fn http_hook_url_env_expansion_end_to_end() {
     // call is allowed; the failure is recorded for scrollback.
     assert_eq!(
         pre_result.decision,
-        HookDecision::Allow,
+        HookDecision::allow(),
         "fail-open: SSRF-blocked HTTP hook must NOT block the tool call"
     );
     assert_eq!(pre_result.results.len(), 1);
@@ -901,5 +901,5 @@ async fn lenient_parsing_with_mixed_claude_events() {
         &ctx,
     )
     .await;
-    assert_eq!(result.decision, HookDecision::Allow);
+    assert_eq!(result.decision, HookDecision::allow());
 }

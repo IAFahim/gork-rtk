@@ -14,6 +14,8 @@
 //! - Four event types: `session_start`, `pre_tool_use`, `post_tool_use`, `session_end`
 //! - Command-backed hooks only
 //! - `pre_tool_use` hooks can deny/allow (blocking); all others are non-blocking
+//! - `pre_tool_use` hooks may also return `updatedInput` (Claude Code / RTK shape)
+//!   to rewrite tool arguments before execution
 //! - Fail-open by default: hook failures do not block normal operation
 //!
 //! ## Quick start

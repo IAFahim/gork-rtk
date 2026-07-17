@@ -4,9 +4,37 @@ use std::time::Duration;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HookDecision {
     /// All hooks allowed (or no hooks matched).
-    Allow,
+    ///
+    /// `updated_input` is an optional Claude Code / RTK-compatible tool-input
+    /// patch. When present, callers should shallow-merge it into the tool's
+    /// arguments before execution (e.g. rewrite `git status` → `rtk git status`).
+    Allow {
+        updated_input: Option<serde_json::Value>,
+    },
     /// At least one hook denied with the given reason.
     Deny { reason: String, hook_name: String },
+}
+
+impl HookDecision {
+    /// Allow with no tool-input mutation.
+    pub fn allow() -> Self {
+        Self::Allow {
+            updated_input: None,
+        }
+    }
+
+    /// Allow, optionally patching tool input.
+    pub fn allow_with_update(updated_input: Option<serde_json::Value>) -> Self {
+        Self::Allow { updated_input }
+    }
+
+    /// Extract an `updated_input` patch when this is an allow decision.
+    pub fn updated_input(&self) -> Option<&serde_json::Value> {
+        match self {
+            Self::Allow { updated_input } => updated_input.as_ref(),
+            Self::Deny { .. } => None,
+        }
+    }
 }
 
 /// HTTP-specific execution details for scrollback enrichment.

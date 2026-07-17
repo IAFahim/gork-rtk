@@ -36,7 +36,7 @@ pub async fn dispatch_pre_tool_use(
     let hooks = registry.hooks_for(HookEventName::PreToolUse);
     if hooks.is_empty() {
         return PreToolUseResult {
-            decision: HookDecision::Allow,
+            decision: HookDecision::allow(),
             results: Vec::new(),
         };
     }
@@ -55,6 +55,8 @@ pub async fn dispatch_pre_tool_use(
 
     let tool_name = extract_tool_name(envelope);
     let mut run_results = Vec::new();
+    // Accumulated Claude/RTK-style tool-input patches (later hooks win per key).
+    let mut updated_input: Option<serde_json::Value> = None;
 
     for spec in hooks {
         if !spec.enabled || crate::trust::is_hook_disabled(&spec.name) {
@@ -105,12 +107,18 @@ pub async fn dispatch_pre_tool_use(
                     results: run_results,
                 };
             }
-            HookRunnerResult::Decision(HookDecision::Allow) => {
+            HookRunnerResult::Decision(HookDecision::Allow {
+                updated_input: patch,
+            }) => {
                 tracing::info!(
                     hook_name = %spec.name,
                     elapsed_ms = elapsed.as_millis() as u64,
+                    has_update = patch.is_some(),
                     "hook allowed"
                 );
+                if let Some(patch) = patch {
+                    merge_updated_input(&mut updated_input, patch);
+                }
                 run_results.push(HookRunResult::Success {
                     hook_name: spec.name.clone(),
                     elapsed,
@@ -154,8 +162,22 @@ pub async fn dispatch_pre_tool_use(
 
     record_dispatch_counts(&span, &run_results, 0);
     PreToolUseResult {
-        decision: HookDecision::Allow,
+        decision: HookDecision::allow_with_update(updated_input),
         results: run_results,
+    }
+}
+
+/// Shallow-merge a tool-input patch into the accumulator (later keys win).
+fn merge_updated_input(acc: &mut Option<serde_json::Value>, patch: serde_json::Value) {
+    match (acc.as_mut(), patch) {
+        (Some(serde_json::Value::Object(base)), serde_json::Value::Object(patch_map)) => {
+            for (k, v) in patch_map {
+                base.insert(k, v);
+            }
+        }
+        (_, other) => {
+            *acc = Some(other);
+        }
     }
 }
 
@@ -460,7 +482,7 @@ mod tests {
         let registry = registry_from_specs(vec![]);
         let envelope = pre_tool_use_envelope("run_terminal_cmd");
         let result = dispatch_pre_tool_use(&registry, &envelope, &run_ctx()).await;
-        assert_eq!(result.decision, HookDecision::Allow);
+        assert_eq!(result.decision, HookDecision::allow());
     }
 
     #[tokio::test]
@@ -469,7 +491,7 @@ mod tests {
         let registry = registry_from_specs(vec![spec]);
         let envelope = pre_tool_use_envelope("run_terminal_cmd");
         let result = dispatch_pre_tool_use(&registry, &envelope, &run_ctx()).await;
-        assert_eq!(result.decision, HookDecision::Allow);
+        assert_eq!(result.decision, HookDecision::allow());
     }
 
     #[tokio::test]
@@ -507,7 +529,7 @@ mod tests {
         let registry = registry_from_specs(vec![spec]);
         let envelope = pre_tool_use_envelope("run_terminal_cmd");
         let result = dispatch_pre_tool_use(&registry, &envelope, &run_ctx()).await;
-        assert_eq!(result.decision, HookDecision::Allow);
+        assert_eq!(result.decision, HookDecision::allow());
     }
 
     #[tokio::test]
@@ -522,7 +544,7 @@ mod tests {
         let registry = registry_from_specs(vec![spec]);
         let envelope = pre_tool_use_envelope("run_terminal_cmd");
         let result = dispatch_pre_tool_use(&registry, &envelope, &run_ctx()).await;
-        assert_eq!(result.decision, HookDecision::Allow);
+        assert_eq!(result.decision, HookDecision::allow());
     }
 
     #[tokio::test]
@@ -638,7 +660,7 @@ mod tests {
         let registry = registry_from_specs(vec![allow_spec, deny_spec]);
         let envelope = pre_tool_use_envelope("run_terminal_cmd");
         let result = dispatch_pre_tool_use(&registry, &envelope, &run_ctx()).await;
-        assert_eq!(result.decision, HookDecision::Allow);
+        assert_eq!(result.decision, HookDecision::allow());
     }
 
     #[tokio::test]
@@ -651,7 +673,7 @@ mod tests {
         let result = dispatch_pre_tool_use(&registry, &envelope, &run_ctx()).await;
         assert_eq!(
             result.decision,
-            HookDecision::Allow,
+            HookDecision::allow(),
             "fail-open: a crashing hook must not block the tool call"
         );
         assert_eq!(result.results.len(), 1);
@@ -702,7 +724,7 @@ mod tests {
         let registry = registry_from_specs(specs);
         let envelope = pre_tool_use_envelope("run_terminal_cmd");
         let result = dispatch_pre_tool_use(&registry, &envelope, &run_ctx()).await;
-        assert_eq!(result.decision, HookDecision::Allow);
+        assert_eq!(result.decision, HookDecision::allow());
     }
 
     #[tokio::test]
@@ -723,7 +745,7 @@ mod tests {
         let registry = registry_from_specs(vec![disabled_deny, enabled_allow]);
         let envelope = pre_tool_use_envelope("run_terminal_cmd");
         let result = dispatch_pre_tool_use(&registry, &envelope, &run_ctx()).await;
-        assert_eq!(result.decision, HookDecision::Allow);
+        assert_eq!(result.decision, HookDecision::allow());
     }
 
     // ── fail-open regression tests ───────────────────────────────
@@ -739,7 +761,7 @@ mod tests {
         let result = dispatch_pre_tool_use(&registry, &envelope, &run_ctx()).await;
         assert_eq!(
             result.decision,
-            HookDecision::Allow,
+            HookDecision::allow(),
             "fail-open: bad output must not block the tool call"
         );
         assert_eq!(result.results.len(), 1);

@@ -16,11 +16,74 @@ const MAX_OUTPUT_BYTES: usize = 64 * 1024;
 const DENY_EXIT_CODE: i32 = 2;
 
 /// The JSON result structure expected from blocking hooks.
+///
+/// Accepts Grok-native shape (`{"decision":"allow|deny", ...}`) and Claude Code
+/// / RTK shape (`{"hookSpecificOutput":{"updatedInput":{...}}}`).
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct HookOutput {
-    decision: String,
+    #[serde(default)]
+    decision: Option<String>,
     #[serde(default)]
     reason: Option<String>,
+    /// Grok-native / Claude top-level input patch.
+    #[serde(default)]
+    updated_input: Option<serde_json::Value>,
+    /// Claude Code nested envelope (used by RTK's `rtk hook claude`).
+    #[serde(default)]
+    hook_specific_output: Option<HookSpecificOutput>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct HookSpecificOutput {
+    #[serde(default)]
+    updated_input: Option<serde_json::Value>,
+    #[serde(default)]
+    permission_decision: Option<String>,
+    #[serde(default)]
+    permission_decision_reason: Option<String>,
+}
+
+impl HookOutput {
+    /// True when this JSON looks like a deliberate hook response (not random stdout).
+    fn is_recognized(&self) -> bool {
+        self.decision.is_some()
+            || self.reason.is_some()
+            || self.updated_input.is_some()
+            || self.hook_specific_output.is_some()
+    }
+
+    fn resolved_decision(&self) -> Option<&str> {
+        self.decision
+            .as_deref()
+            .or_else(|| {
+                self.hook_specific_output
+                    .as_ref()
+                    .and_then(|h| h.permission_decision.as_deref())
+            })
+    }
+
+    fn resolved_updated_input(&self) -> Option<serde_json::Value> {
+        self.updated_input
+            .clone()
+            .or_else(|| {
+                self.hook_specific_output
+                    .as_ref()
+                    .and_then(|h| h.updated_input.clone())
+            })
+    }
+
+    fn resolved_deny_reason(&self, hook_name: &str) -> String {
+        self.reason
+            .clone()
+            .or_else(|| {
+                self.hook_specific_output
+                    .as_ref()
+                    .and_then(|h| h.permission_decision_reason.clone())
+            })
+            .unwrap_or_else(|| format!("denied by hook '{hook_name}'"))
+    }
 }
 
 /// Run a single hook command.
@@ -441,61 +504,66 @@ fn parse_blocking_result(
     hook_name: &str,
     elapsed: Duration,
 ) -> (HookRunnerResult, Duration) {
-    // Try to parse JSON output first.
+    // Try to parse JSON output first (Grok-native or Claude/RTK shape).
     let json_decision = if !stdout.trim().is_empty() {
         serde_json::from_str::<HookOutput>(stdout.trim()).ok()
     } else {
         None
     };
 
-    // If we have valid JSON with a deny, prefer that over exit code.
-    if let Some(ref output) = json_decision {
-        if output.decision == "deny" {
-            let reason = output
-                .reason
-                .clone()
-                .unwrap_or_else(|| format!("denied by hook '{hook_name}'"));
-
-            if exit_code != DENY_EXIT_CODE && exit_code != 0 {
-                tracing::warn!(
-                    hook_name,
-                    exit_code,
-                    "JSON decision is 'deny' but exit code is not 0 or 2 — using JSON decision"
+    if let Some(ref output) = json_decision
+        && output.is_recognized()
+    {
+        let updated_input = output.resolved_updated_input();
+        match output.resolved_decision() {
+            Some("deny") => {
+                let reason = output.resolved_deny_reason(hook_name);
+                if exit_code != DENY_EXIT_CODE && exit_code != 0 {
+                    tracing::warn!(
+                        hook_name,
+                        exit_code,
+                        "JSON decision is 'deny' but exit code is not 0 or 2 — using JSON decision"
+                    );
+                }
+                return (
+                    HookRunnerResult::Decision(HookDecision::Deny {
+                        reason,
+                        hook_name: hook_name.to_string(),
+                    }),
+                    elapsed,
                 );
             }
-
-            return (
-                HookRunnerResult::Decision(HookDecision::Deny {
-                    reason,
-                    hook_name: hook_name.to_string(),
-                }),
-                elapsed,
-            );
-        }
-
-        if output.decision == "allow" {
-            if exit_code == DENY_EXIT_CODE {
-                tracing::warn!(
-                    hook_name,
-                    "JSON decision is 'allow' but exit code is 2 — using JSON decision"
+            Some("allow") | None => {
+                // `None` covers Claude/RTK responses that only set
+                // `hookSpecificOutput.updatedInput` (no explicit decision).
+                if exit_code == DENY_EXIT_CODE {
+                    tracing::warn!(
+                        hook_name,
+                        "JSON decision is 'allow' but exit code is 2 — using JSON decision"
+                    );
+                }
+                return (
+                    HookRunnerResult::Decision(HookDecision::allow_with_update(updated_input)),
+                    elapsed,
                 );
             }
-            return (HookRunnerResult::Decision(HookDecision::Allow), elapsed);
+            Some(other) => {
+                return (
+                    HookRunnerResult::Failed(format!(
+                        "unknown decision value '{other}' from hook '{hook_name}'"
+                    )),
+                    elapsed,
+                );
+            }
         }
-
-        // Unknown decision value — treat as failure.
-        return (
-            HookRunnerResult::Failed(format!(
-                "unknown decision value '{}' from hook '{hook_name}'",
-                output.decision
-            )),
-            elapsed,
-        );
     }
 
     // No valid JSON — fall back to exit code.
     match exit_code {
-        0 => (HookRunnerResult::Decision(HookDecision::Allow), elapsed),
+        0 => (
+            HookRunnerResult::Decision(HookDecision::allow()),
+            elapsed,
+        ),
         DENY_EXIT_CODE => (
             HookRunnerResult::Decision(HookDecision::Deny {
                 reason: format!("denied by hook '{hook_name}' (exit code {DENY_EXIT_CODE})"),
@@ -550,8 +618,47 @@ mod tests {
             parse_blocking_result(r#"{"decision":"allow"}"#, 0, "test", Duration::ZERO);
         assert!(matches!(
             result,
-            HookRunnerResult::Decision(HookDecision::Allow)
+            HookRunnerResult::Decision(HookDecision::Allow {
+                updated_input: None
+            })
         ));
+    }
+
+    #[test]
+    fn parse_allow_with_top_level_updated_input() {
+        let (result, _) = parse_blocking_result(
+            r#"{"decision":"allow","updatedInput":{"command":"rtk git status"}}"#,
+            0,
+            "test",
+            Duration::ZERO,
+        );
+        match result {
+            HookRunnerResult::Decision(HookDecision::Allow {
+                updated_input: Some(v),
+            }) => {
+                assert_eq!(v["command"], "rtk git status");
+            }
+            other => panic!("expected Allow with updated_input, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_rtk_claude_hook_specific_output() {
+        // Exact shape emitted by `rtk hook claude` (no top-level decision).
+        let (result, _) = parse_blocking_result(
+            r#"{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecisionReason":"RTK auto-rewrite","updatedInput":{"command":"rtk git status"}}}"#,
+            0,
+            "rtk",
+            Duration::ZERO,
+        );
+        match result {
+            HookRunnerResult::Decision(HookDecision::Allow {
+                updated_input: Some(v),
+            }) => {
+                assert_eq!(v["command"], "rtk git status");
+            }
+            other => panic!("expected RTK Allow with updated_input, got {other:?}"),
+        }
     }
 
     #[test]
@@ -587,7 +694,7 @@ mod tests {
         let (result, _) = parse_blocking_result("", 0, "test", Duration::ZERO);
         assert!(matches!(
             result,
-            HookRunnerResult::Decision(HookDecision::Allow)
+            HookRunnerResult::Decision(HookDecision::Allow { .. })
         ));
     }
 
@@ -626,7 +733,7 @@ mod tests {
         let (result, _) = parse_blocking_result("not json at all", 0, "test", Duration::ZERO);
         assert!(matches!(
             result,
-            HookRunnerResult::Decision(HookDecision::Allow)
+            HookRunnerResult::Decision(HookDecision::Allow { .. })
         ));
     }
 
@@ -824,7 +931,7 @@ mod tests {
         let (result, _duration) = run_command_hook(&spec, &envelope, &ctx, true).await;
 
         assert!(
-            matches!(result, HookRunnerResult::Decision(HookDecision::Allow)),
+            matches!(result, HookRunnerResult::Decision(HookDecision::Allow { .. })),
             "blocking hook should return Allow, got {:?}",
             result
         );

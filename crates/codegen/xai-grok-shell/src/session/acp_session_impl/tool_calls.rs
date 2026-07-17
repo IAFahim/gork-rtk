@@ -869,7 +869,8 @@ impl SessionActor {
                 }
             }
         };
-        let tool_input = match self
+        let mut raw_input = raw_input;
+        let mut tool_input = match self
             .agent
             .borrow()
             .tool_bridge()
@@ -890,7 +891,7 @@ impl SessionActor {
                 return Ok(Err(ToolLoop::ToolParsingError));
             }
         };
-        let access_kind = AccessKind::from(&tool_input);
+        let mut access_kind = AccessKind::from(&tool_input);
         let plan_gate = plan_mode_edit_gate(&self.plan_mode.lock(), &tool_input, &access_kind);
         if plan_gate != PlanEditGate::Allow {
             tracing::info_span!(
@@ -951,18 +952,62 @@ impl SessionActor {
                     &pre_result.results,
                 )
                 .await;
-                if let xai_grok_hooks::result::HookDecision::Deny { reason, hook_name } =
-                    pre_result.decision
-                {
-                    return Ok(Err(self
-                        .deny_tool(
-                            &call.id,
-                            &tool_call_id,
-                            resolved_tool_name.clone(),
-                            hook_name,
-                            reason,
-                        )
-                        .await?));
+                match pre_result.decision {
+                    xai_grok_hooks::result::HookDecision::Deny { reason, hook_name } => {
+                        return Ok(Err(self
+                            .deny_tool(
+                                &call.id,
+                                &tool_call_id,
+                                resolved_tool_name.clone(),
+                                hook_name,
+                                reason,
+                            )
+                            .await?));
+                    }
+                    xai_grok_hooks::result::HookDecision::Allow {
+                        updated_input: Some(patch),
+                    } => {
+                        // Claude Code / RTK compatibility: shallow-merge
+                        // hookSpecificOutput.updatedInput into tool args and
+                        // re-parse so the rewritten command actually runs.
+                        if let (Some(base), Some(obj)) =
+                            (raw_input.as_object_mut(), patch.as_object())
+                        {
+                            for (k, v) in obj {
+                                base.insert(k.clone(), v.clone());
+                            }
+                        } else {
+                            raw_input = patch;
+                        }
+                        match self
+                            .agent
+                            .borrow()
+                            .tool_bridge()
+                            .try_parse(&call.function.name, raw_input.clone())
+                            .await
+                        {
+                            Ok(rewritten) => {
+                                tracing::info!(
+                                    tool_name = %resolved_tool_name,
+                                    call_id = %call.id,
+                                    "pre_tool_use hook rewrote tool input"
+                                );
+                                tool_input = rewritten;
+                                access_kind = AccessKind::from(&tool_input);
+                            }
+                            Err(err) => {
+                                tracing::warn!(
+                                    tool_name = %resolved_tool_name,
+                                    call_id = %call.id,
+                                    error = %err,
+                                    "pre_tool_use updatedInput failed to re-parse; keeping original"
+                                );
+                            }
+                        }
+                    }
+                    xai_grok_hooks::result::HookDecision::Allow {
+                        updated_input: None,
+                    } => {}
                 }
             }
             if let Some(denied) = self
