@@ -1,0 +1,25 @@
+[package]
+name = "xai-gork-telegram"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Native Telegram phone remote for Gork Build (ACP-over-stdio)"
+publish = false
+
+[[bin]]
+name = "gork-telegram"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive", "env"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+uuid = { version = "1", features = ["v4"] }
+
+[dev-dependencies]
+tempfile = "3"

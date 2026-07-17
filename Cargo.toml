@@ -15,6 +15,7 @@ members = [
     "crates/codegen/xai-file-utils",
     "crates/codegen/xai-fsnotify",
     "crates/codegen/xai-gix-status",
+    "crates/codegen/xai-gork-telegram",
     "crates/codegen/xai-grok-agent",
     "crates/codegen/xai-grok-announcements",
     "crates/codegen/xai-grok-auth",

@@ -101,6 +101,29 @@ So: **ACP was the right seam**. **Python wrapping the CLI forever was the wrong 
 
 ## Status
 
-- Bridge repo: https://github.com/IAFahim/grok-telegram-bridge (Python, ACP-over-stdio)  
+- Bridge repo: https://github.com/IAFahim/grok-telegram-bridge (Python, ACP-over-stdio, transitional)  
 - Binary: https://github.com/IAFahim/gork-rtk (privacy + RTK)  
-- Native Telegram command: **not yet shipped** — this doc is the contract for building it.
+- **Native phone remote (shipped in-tree):** crate `xai-gork-telegram` → binary **`gork-telegram`**
+
+### Run native remote
+
+```bash
+# Build
+cargo build -p xai-gork-telegram --release
+
+# Env (fail-closed without allowlist)
+export TELEGRAM_BOT_TOKEN=…
+export ALLOWED_USER_IDS=123456789
+export GORK_TELEGRAM_CWD=/path/to/project
+export GORK_BIN=$HOME/.local/bin/gork   # privacy+RTK agent from install.sh
+export ORCHESTRATOR_HOST_ID=$(hostname -s)
+
+./target/release/gork-telegram
+# or always-on:
+bash scripts/install-telegram.sh
+systemctl --user enable --now gork-telegram.service
+```
+
+**Phone loop:** message the bot → ACP `session/prompt` on a real agent process → reply text + tool titles stream back → permission / multi-option / plan reverse-requests become inline buttons.
+
+**Agent process:** `gork agent stdio` (same official ACP path as IDEs). Full tools/hooks/RTK apply because the agent binary is Gork Build itself — not a dumbed-down wrapper.
