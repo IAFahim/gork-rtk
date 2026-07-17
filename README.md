@@ -23,6 +23,7 @@ coding works. Research uploads and product analytics are hard-off separately;
 they are not the same channel.
 
 [Building from source](#build-from-source) ·
+[Phone remote setup](#phone-remote-telegram--setup) ·
 [Privacy](#privacy-guarantees-client) ·
 [Documentation](#documentation) ·
 [Contributing](#contributing) ·

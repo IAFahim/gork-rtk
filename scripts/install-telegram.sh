@@ -17,18 +17,34 @@ install -m 755 "$ROOT/target/release/gork-telegram" "$BIN_DIR/gork-telegram"
 # Convenience: gork-telegram also as gork-tg
 ln -sfn "$BIN_DIR/gork-telegram" "$BIN_DIR/gork-tg"
 
+# Prefer already-installed privacy gork as the agent
+GORK_CANDIDATE=""
+for c in "$BIN_DIR/gork" "$HOME/.grok/bin/gork" "$HOME/.local/bin/gork" "$(command -v gork 2>/dev/null || true)"; do
+  if [ -n "$c" ] && [ -x "$c" ]; then
+    GORK_CANDIDATE="$c"
+    break
+  fi
+done
+
 if [ ! -f "$ENV_FILE" ]; then
   cat > "$ENV_FILE" <<EOF
-# Native Gork phone remote — chmod 600 this file
+# Native Gork phone remote — keep this file chmod 600
+# Docs: https://github.com/IAFahim/gork-rtk#phone-remote-telegram--setup
+
 TELEGRAM_BOT_TOKEN=REPLACE_ME
 ALLOWED_USER_IDS=REPLACE_ME
 ORCHESTRATOR_HOST_ID=$(hostname -s 2>/dev/null || echo this-pc)
 GORK_TELEGRAM_CWD=$CWD
-# Optional: GORK_BIN=$BIN_DIR/gork
-# Optional: GORK_TELEGRAM_SESSION=
+GORK_BIN=${GORK_CANDIDATE:-$BIN_DIR/gork}
+# Optional:
+# GORK_TELEGRAM_SESSION=
+# GROK_SESSIONS_ROOT=$HOME/.grok/sessions
+# GORK_TELEGRAM_DATA=$HOME/.grok/telegram-native
 EOF
   chmod 600 "$ENV_FILE"
-  echo "Wrote $ENV_FILE — edit token + user id, then re-run this script."
+  echo "Wrote $ENV_FILE — edit TELEGRAM_BOT_TOKEN + ALLOWED_USER_IDS"
+else
+  echo "Keeping existing $ENV_FILE"
 fi
 
 cat > "$UNIT_DIR/gork-telegram.service" <<EOF
@@ -45,18 +61,31 @@ ExecStart=$BIN_DIR/gork-telegram
 Restart=on-failure
 RestartSec=3
 
+# Ensure PATH can find gork if GORK_BIN is a bare name
+Environment=PATH=$BIN_DIR:/usr/local/bin:/usr/bin
+
 [Install]
 WantedBy=default.target
 EOF
 
 systemctl --user daemon-reload
-echo "Unit installed: gork-telegram.service"
 echo ""
-echo "Next:"
-echo "  1) Edit $ENV_FILE"
-echo "  2) systemctl --user enable --now gork-telegram.service"
-echo "  3) journalctl --user -u gork-telegram -f"
-echo "  4) Message your bot from an allowlisted account"
+echo "Installed:"
+echo "  binary  $BIN_DIR/gork-telegram"
+echo "  env     $ENV_FILE"
+echo "  unit    gork-telegram.service"
+if [ -n "$GORK_CANDIDATE" ]; then
+  echo "  agent   $GORK_CANDIDATE"
+else
+  echo "  agent   NOT FOUND — run scripts/install.sh or set GORK_BIN in $ENV_FILE"
+fi
 echo ""
-echo "Binary: $BIN_DIR/gork-telegram"
-echo "Agent: set GORK_BIN to your privacy gork binary (install.sh) if not on PATH"
+echo "Next steps:"
+echo "  1) nano $ENV_FILE   # set TELEGRAM_BOT_TOKEN and ALLOWED_USER_IDS"
+echo "  2) Stop any old Python bridge using the same bot token:"
+echo "       systemctl --user stop grok-telegram-bridge.service 2>/dev/null || true"
+echo "  3) systemctl --user enable --now gork-telegram.service"
+echo "  4) journalctl --user -u gork-telegram -f"
+echo "  5) Open Telegram → your bot → /start"
+echo ""
+echo "Optional (survive logout): sudo loginctl enable-linger \"\$USER\""
