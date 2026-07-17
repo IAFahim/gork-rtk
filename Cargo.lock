@@ -12990,6 +12990,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "xai-gork-telegram"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "reqwest 0.12.24",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
 name = "xai-grok-agent"
 version = "0.1.0"
 dependencies = [
