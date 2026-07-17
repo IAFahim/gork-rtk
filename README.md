@@ -112,6 +112,18 @@ That is required for a cloud coding agent and is separate from the research /
 product-analytics hard-offs. Gork Build does not add extra research packaging
 on top.
 
+## Install (Linux x86_64 release)
+
+Privacy + RTK prebuilt binary:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/IAFahim/gork-rtk/main/scripts/install.sh | bash
+```
+
+Releases: https://github.com/IAFahim/gork-rtk/releases
+
+---
+
 ## Build from source
 
 Requirements: Rust (see `rust-toolchain.toml`), `protoc` (see `bin/protoc`).
