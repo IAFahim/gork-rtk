@@ -54,6 +54,38 @@ Comparison at a glance:
 | Whole-repo research packaging | Present upstream | **Disabled** |
 | Vendor auto-update | Yes (`x.ai/cli`) | **Hard-disabled** (rebuild / community releases) |
 | Coding-data retention | Opt-in available | **Opt-out only (locked)** |
+| PreToolUse tool-input rewrite | Allow / deny only | **+ Claude/RTK `updatedInput`** (this branch) |
+
+---
+
+## RTK (this branch)
+
+This branch adds Claude Code–compatible **PreToolUse `updatedInput`** so
+[RTK](https://github.com/rtk-ai/rtk) can transparently rewrite shell commands
+(e.g. `git status` → `rtk git status`) for 60–90% fewer tokens on common
+dev tooling. Privacy hard-offs from mainline Gork Build are unchanged.
+
+Wire the hook (once):
+
+```sh
+mkdir -p ~/.grok/hooks
+cat > ~/.grok/hooks/rtk-rewrite.json <<'EOF'
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|run_terminal_command|Shell",
+        "hooks": [
+          { "type": "command", "command": "rtk hook claude", "timeout": 5 }
+        ]
+      }
+    ]
+  }
+}
+EOF
+```
+
+Requires `rtk` on `PATH`. See [`docs/RTK.md`](docs/RTK.md).
 
 ---
 
