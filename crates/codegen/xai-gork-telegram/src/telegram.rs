@@ -95,10 +95,7 @@ impl TelegramBot {
             .query(&[
                 ("offset", offset.to_string()),
                 ("timeout", timeout.to_string()),
-                (
-                    "allowed_updates",
-                    r#"["message","callback_query"]"#.into(),
-                ),
+                ("allowed_updates", r#"["message","callback_query"]"#.into()),
             ])
             .send()
             .await
@@ -179,7 +176,10 @@ impl TelegramBot {
     }
 
     pub async fn download_file(&self, file_path: &str, dest: &PathBuf) -> Result<()> {
-        let url = format!("https://api.telegram.org/file/bot{}/{}", self.token, file_path);
+        let url = format!(
+            "https://api.telegram.org/file/bot{}/{}",
+            self.token, file_path
+        );
         let bytes = self
             .http
             .get(&url)
@@ -235,7 +235,9 @@ mod tests {
     fn keyboard_caps_callback() {
         let long = "x".repeat(80);
         let kb = inline_keyboard(vec![vec![("A".into(), long)]]);
-        let data = kb["inline_keyboard"][0][0]["callback_data"].as_str().unwrap();
+        let data = kb["inline_keyboard"][0][0]["callback_data"]
+            .as_str()
+            .unwrap();
         assert!(data.len() <= 64);
     }
 }

@@ -54,7 +54,10 @@ pub struct AcpClient {
 }
 
 impl AcpClient {
-    pub async fn spawn(agent_bin: &Path, cwd: &Path) -> Result<(Self, mpsc::UnboundedReceiver<AcpEvent>)> {
+    pub async fn spawn(
+        agent_bin: &Path,
+        cwd: &Path,
+    ) -> Result<(Self, mpsc::UnboundedReceiver<AcpEvent>)> {
         let mut child = Command::new(agent_bin)
             .args(["agent", "stdio"])
             .current_dir(cwd)
