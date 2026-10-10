@@ -87,13 +87,17 @@ pub fn card_for_request(req: &ServerRequest) -> (String, Option<Value>) {
         ),
         ServerRequest::AskUser {
             question, options, ..
-        } => (question_card(question, options), Some(question_keyboard(options))),
+        } => (
+            question_card(question, options),
+            Some(question_keyboard(options)),
+        ),
         ServerRequest::ExitPlan { plan_excerpt, .. } => {
             (plan_card(plan_excerpt), Some(plan_keyboard()))
         }
-        ServerRequest::Other { method, .. } => {
-            (format!("Unhandled reverse-request: <code>{}</code>", esc(method)), None)
-        }
+        ServerRequest::Other { method, .. } => (
+            format!("Unhandled reverse-request: <code>{}</code>", esc(method)),
+            None,
+        ),
     }
 }
 

@@ -203,7 +203,6 @@ async fn fanout_acp_events(
 }
 
 impl App {
-
     fn home_keyboard(&self) -> serde_json::Value {
         let live_label = if self.live.is_some() {
             "⏹ Stop live"
@@ -414,7 +413,9 @@ impl App {
         } else if let Some(ref doc) = msg.document {
             (
                 doc.file_id.clone(),
-                doc.file_name.clone().unwrap_or_else(|| "document.bin".into()),
+                doc.file_name
+                    .clone()
+                    .unwrap_or_else(|| "document.bin".into()),
                 false,
             )
         } else {
@@ -427,16 +428,17 @@ impl App {
             uuid::Uuid::new_v4(),
             sanitize_name(&filename)
         ));
-        let _ = self
-            .bot
-            .send_message(chat_id, "📥 Saving…", None)
-            .await;
+        let _ = self.bot.send_message(chat_id, "📥 Saving…", None).await;
         match self.bot.get_file_path(&file_id).await {
             Ok(fp) => {
                 if let Err(e) = self.bot.download_file(&fp, &dest).await {
                     let _ = self
                         .bot
-                        .send_message(chat_id, &format!("❌ download: {}", esc(&e.to_string())), None)
+                        .send_message(
+                            chat_id,
+                            &format!("❌ download: {}", esc(&e.to_string())),
+                            None,
+                        )
                         .await;
                     return;
                 }
@@ -444,7 +446,11 @@ impl App {
             Err(e) => {
                 let _ = self
                     .bot
-                    .send_message(chat_id, &format!("❌ getFile: {}", esc(&e.to_string())), None)
+                    .send_message(
+                        chat_id,
+                        &format!("❌ getFile: {}", esc(&e.to_string())),
+                        None,
+                    )
                     .await;
                 return;
             }
@@ -538,7 +544,10 @@ impl App {
                 .await;
             return;
         }
-        let mut lines = vec!["<b>📚 Sessions</b> (newest first)".to_string(), String::new()];
+        let mut lines = vec![
+            "<b>📚 Sessions</b> (newest first)".to_string(),
+            String::new(),
+        ];
         let mut rows = Vec::new();
         for (i, s) in list.iter().enumerate() {
             if i >= 8 {
@@ -554,7 +563,10 @@ impl App {
                 mark,
                 esc(&s.title.chars().take(40).collect::<String>()),
                 esc(&s.session_id.chars().take(12).collect::<String>()),
-                esc(Path::new(&s.cwd).file_name().and_then(|n| n.to_str()).unwrap_or(&s.cwd))
+                esc(Path::new(&s.cwd)
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or(&s.cwd))
             ));
             let cb = format!("use:{}", s.session_id);
             if cb.len() <= 64 {
@@ -564,11 +576,7 @@ impl App {
         }
         let _ = self
             .bot
-            .send_message(
-                chat_id,
-                &lines.join("\n"),
-                Some(inline_keyboard(rows)),
-            )
+            .send_message(chat_id, &lines.join("\n"), Some(inline_keyboard(rows)))
             .await;
     }
 
@@ -585,10 +593,7 @@ impl App {
                 .await;
             return;
         }
-        let mut lines = vec![
-            format!("📋 <b>Notes</b> · {}", notes.len()),
-            String::new(),
-        ];
+        let mut lines = vec![format!("📋 <b>Notes</b> · {}", notes.len()), String::new()];
         for (i, n) in notes.iter().take(10).enumerate() {
             let t = n.text.replace('\n', " ");
             let t = if t.len() > 60 {
@@ -773,10 +778,7 @@ impl App {
                     let _ = bot
                         .send_message(
                             chat_id,
-                            &format!(
-                                "✅ Note drained. Remaining: <b>{}</b>",
-                                notes.count()
-                            ),
+                            &format!("✅ Note drained. Remaining: <b>{}</b>", notes.count()),
                             Some(home_kb),
                         )
                         .await;
@@ -786,10 +788,7 @@ impl App {
                     let _ = bot
                         .send_message(
                             chat_id,
-                            &format!(
-                                "❌ Drain failed — note restored.\n{}",
-                                esc(&e.to_string())
-                            ),
+                            &format!("❌ Drain failed — note restored.\n{}", esc(&e.to_string())),
                             None,
                         )
                         .await;
@@ -1005,7 +1004,13 @@ impl App {
         }
         if let Some(qid) = data.strip_prefix("q:") {
             let pending = self.shared.lock().await.pending_rpc.remove("opt");
-            if let Some((id, ServerRequest::AskUser { question, options, .. })) = pending {
+            if let Some((
+                id,
+                ServerRequest::AskUser {
+                    question, options, ..
+                },
+            )) = pending
+            {
                 let label = options
                     .iter()
                     .find(|(i, _)| i == qid)

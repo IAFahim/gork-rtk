@@ -55,23 +55,19 @@ impl HookOutput {
     }
 
     fn resolved_decision(&self) -> Option<&str> {
-        self.decision
-            .as_deref()
-            .or_else(|| {
-                self.hook_specific_output
-                    .as_ref()
-                    .and_then(|h| h.permission_decision.as_deref())
-            })
+        self.decision.as_deref().or_else(|| {
+            self.hook_specific_output
+                .as_ref()
+                .and_then(|h| h.permission_decision.as_deref())
+        })
     }
 
     fn resolved_updated_input(&self) -> Option<serde_json::Value> {
-        self.updated_input
-            .clone()
-            .or_else(|| {
-                self.hook_specific_output
-                    .as_ref()
-                    .and_then(|h| h.updated_input.clone())
-            })
+        self.updated_input.clone().or_else(|| {
+            self.hook_specific_output
+                .as_ref()
+                .and_then(|h| h.updated_input.clone())
+        })
     }
 
     fn resolved_deny_reason(&self, hook_name: &str) -> String {
@@ -560,10 +556,7 @@ fn parse_blocking_result(
 
     // No valid JSON — fall back to exit code.
     match exit_code {
-        0 => (
-            HookRunnerResult::Decision(HookDecision::allow()),
-            elapsed,
-        ),
+        0 => (HookRunnerResult::Decision(HookDecision::allow()), elapsed),
         DENY_EXIT_CODE => (
             HookRunnerResult::Decision(HookDecision::Deny {
                 reason: format!("denied by hook '{hook_name}' (exit code {DENY_EXIT_CODE})"),
@@ -931,7 +924,10 @@ mod tests {
         let (result, _duration) = run_command_hook(&spec, &envelope, &ctx, true).await;
 
         assert!(
-            matches!(result, HookRunnerResult::Decision(HookDecision::Allow { .. })),
+            matches!(
+                result,
+                HookRunnerResult::Decision(HookDecision::Allow { .. })
+            ),
             "blocking hook should return Allow, got {:?}",
             result
         );
